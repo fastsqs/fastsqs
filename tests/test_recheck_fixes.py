@@ -11,7 +11,6 @@ from fastsqs import (
     SQSEvent,
     QueueType,
     InvalidMessage,
-    ErrorHandlingMiddleware,
 )
 from fastsqs.middleware import Middleware
 from fastsqs.testing import SQSTestClient
@@ -107,31 +106,6 @@ def test_retryconfig_is_gone():
 
     assert not hasattr(fastsqs, "RetryConfig")
     assert not hasattr(mw, "RetryConfig")
-
-
-# B6 — on a (formerly "temporary"/retryable) error the handler runs exactly
-# once and the failure is routed straight to the dead-letter handler. The DLQ
-# handler is sync here, exercising the maybe_await path.
-def test_error_handler_routes_to_dlq_without_retrying():
-    calls = []
-    dlq_seen = []
-
-    def dlq(payload, record, error):
-        dlq_seen.append((type(error).__name__, record.get("messageId")))
-
-    app = FastSQS()
-    app.add_middleware(ErrorHandlingMiddleware(dead_letter_handler=dlq))
-
-    @app.route(Task)
-    async def handle(msg: Task):
-        calls.append(1)
-        raise ConnectionError("transient boom")
-
-    result = SQSTestClient(app).send({"type": "task", "task_id": "1"}, message_id="x-1")
-
-    assert calls == [1]  # called once, no in-process retry
-    assert result == {"batchItemFailures": [{"itemIdentifier": "x-1"}]}
-    assert dlq_seen == [("ConnectionError", "x-1")]
 
 
 # B7 — a failure in a FIFO group must halt the group (ordering) AND mark the

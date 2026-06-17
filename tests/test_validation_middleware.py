@@ -1,7 +1,7 @@
 """Validation, normalization, masking & error-handling battle tests."""
 
 from fastsqs import FastSQS, SQSEvent
-from fastsqs.middleware import Middleware, ErrorHandlingMiddleware
+from fastsqs.middleware import Middleware
 from fastsqs.testing import SQSTestClient
 
 
@@ -105,40 +105,6 @@ def test_handler_error_not_masked_by_after_hook_error():
     r = SQSTestClient(app).send({"type": "task", "task_id": "1"}, message_id="h1")
     assert r == {"batchItemFailures": [{"itemIdentifier": "h1"}]}
     assert len(seen) == 1 and isinstance(seen[0], ValueError)
-
-
-def test_error_handler_dlq_sync_and_async():
-    # sync dlq
-    sync_seen = []
-
-    def sync_dlq(payload, record, error):
-        sync_seen.append(type(error).__name__)
-
-    app = FastSQS()
-    app.add_middleware(ErrorHandlingMiddleware(dead_letter_handler=sync_dlq))
-
-    @app.route(Task)
-    async def h(msg: Task):
-        raise ConnectionError("x")
-
-    SQSTestClient(app).send({"type": "task", "task_id": "1"})
-    assert sync_seen == ["ConnectionError"]
-
-    # async dlq
-    async_seen = []
-
-    async def async_dlq(payload, record, error):
-        async_seen.append(type(error).__name__)
-
-    app2 = FastSQS()
-    app2.add_middleware(ErrorHandlingMiddleware(dead_letter_handler=async_dlq))
-
-    @app2.route(Task)
-    async def h2(msg: Task):
-        raise ConnectionError("y")
-
-    SQSTestClient(app2).send({"type": "task", "task_id": "1"})
-    assert async_seen == ["ConnectionError"]
 
 
 # ---- D3: positional-only params are not injected (documented) ----

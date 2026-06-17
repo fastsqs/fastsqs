@@ -13,8 +13,6 @@ def test_production_preset_composition():
     assert _names(MiddlewarePreset.production()) == [
         "LoggingMiddleware",
         "TimingMsMiddleware",
-        "ErrorHandlingMiddleware",
-        "DeadLetterQueueMiddleware",
     ]
 
 
@@ -22,5 +20,4 @@ def test_development_preset_composition():
     assert _names(MiddlewarePreset.development()) == [
         "LoggingMiddleware",
         "TimingMsMiddleware",
-        "ErrorHandlingMiddleware",
     ]

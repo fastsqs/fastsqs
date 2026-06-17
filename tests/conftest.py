@@ -1,11 +1,11 @@
 """Shared pytest config.
 
-Integration tests (Docker / Lambda RIE) are marked `integration` and are
-SKIPPED by default so the fast unit suite stays Docker-free. Enable them with
-`--run-integration` (or `RUN_INTEGRATION=1`):
+Two opt-in test tiers are skipped by default so the fast unit suite stays
+dependency-free:
 
     pytest                       # fast unit suite only
     pytest --run-integration     # + Docker RIE integration tests
+    pytest --run-aws             # + tests against real AWS (needs creds)
 """
 
 import os
@@ -20,18 +20,28 @@ def pytest_addoption(parser):
         default=False,
         help="run Docker-based integration tests (Lambda RIE)",
     )
+    parser.addoption(
+        "--run-aws",
+        action="store_true",
+        default=False,
+        help="run tests against REAL AWS (creates/deletes real resources; needs credentials)",
+    )
 
 
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "integration: Docker-based integration test (Lambda RIE / SQS)"
     )
+    config.addinivalue_line(
+        "markers", "aws: hits real AWS (creates/deletes real resources)"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
-    if config.getoption("--run-integration") or os.getenv("RUN_INTEGRATION"):
-        return
-    skip = pytest.mark.skip(reason="needs --run-integration (or RUN_INTEGRATION=1)")
+    run_integration = config.getoption("--run-integration") or os.getenv("RUN_INTEGRATION")
+    run_aws = config.getoption("--run-aws") or os.getenv("RUN_AWS")
     for item in items:
-        if "integration" in item.keywords:
-            item.add_marker(skip)
+        if "integration" in item.keywords and not run_integration:
+            item.add_marker(pytest.mark.skip(reason="needs --run-integration (or RUN_INTEGRATION=1)"))
+        if "aws" in item.keywords and not run_aws:
+            item.add_marker(pytest.mark.skip(reason="needs --run-aws (or RUN_AWS=1)"))
