@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, List, TypedDict, Union, TypeVar
+from typing import Any, Awaitable, Callable, List, Optional, TypedDict, Union, TypeVar
 from enum import Enum
 from pydantic import BaseModel
 
@@ -57,3 +57,51 @@ ProcessingContext = TypedDict(
 )
 """Per-message processing context shared across middleware + handlers.
 All keys optional (total=False) — documents the contract, not enforced."""
+
+
+class Context(dict):
+    """Per-record processing context passed to handlers and middleware.
+
+    It IS a ``dict`` — ``ctx["messageId"]`` reads, ``ctx.get(...)``,
+    ``ctx.setdefault(...)`` and middleware writes all keep working unchanged —
+    plus typed attribute access for the common fields, so handlers can write
+    ``ctx.message_id`` (IDE-checkable, ``str``) instead of ``ctx["messageId"]``
+    (``Any``, typo-prone). Dynamic / middleware-internal keys stay reachable via
+    item access. Annotate a handler param ``ctx: Context`` to get the typing.
+    """
+
+    @property
+    def message_id(self) -> str:
+        return self.get("messageId", "")
+
+    @property
+    def message_type(self) -> Optional[str]:
+        return self.get("message_type")
+
+    @property
+    def queue_type(self) -> str:
+        return self.get("queueType", "")
+
+    @property
+    def record(self) -> dict:
+        return self.get("record", {})
+
+    @property
+    def lambda_context(self) -> Any:
+        return self.get("context")
+
+    @property
+    def route_path(self) -> List[str]:
+        return self.get("route_path", [])
+
+    @property
+    def handler_result(self) -> Any:
+        return self.get("handler_result")
+
+    @property
+    def fifo_info(self) -> Optional[dict]:
+        return self.get("fifoInfo")
+
+    @property
+    def error_history(self) -> List[Any]:
+        return self.get("error_history", [])

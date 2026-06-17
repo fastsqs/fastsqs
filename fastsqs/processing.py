@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .exceptions import RouteNotFound, InvalidMessage, BatchFailedError
 from .middleware import run_middleware_stack
+from .types import Context
 from .utils import group_records_by_message_group
 
 if TYPE_CHECKING:
@@ -70,13 +71,13 @@ class RecordProcessingMixin:
             self._log("error", "JSON decode error", msg_id=msg_id, error=str(e))
             raise InvalidMessage(f"Invalid JSON in message body: {e}")
 
-        ctx: Dict[str, Any] = {
+        ctx: Context = Context({
             "messageId": msg_id,
             "record": record,
             "context": context,
             "route_path": [],
             "queueType": self.queue_type.value,
-        }
+        })
 
         if self.is_fifo_queue():
             attributes = record.get("attributes", {})
