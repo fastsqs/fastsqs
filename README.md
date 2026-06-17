@@ -14,17 +14,15 @@
 ### 🚀 New in Version 0.4.0
 
 - **Middleware Presets**: Quick setup with production, development, and minimal presets
-- **Enhanced Telemetry**: Advanced logging with Elasticsearch integration support
-- **Load Balancing**: Intelligent message distribution across handlers
+- **Pydantic-only core**: no external infra dependencies
 - **Queue Metrics**: Comprehensive queue performance monitoring
 - **Custom Middleware Framework**: Simplified custom middleware creation with examples
 
-### 🏗️ Enterprise Features (0.3.x)
+### 🏗️ Built-in Middleware
 
-- **Idempotency**: Prevent duplicate message processing with memory or DynamoDB storage
-- **Advanced Error Handling**: Exponential backoff, circuit breaker, and DLQ management  
-- **Visibility Timeout Management**: Automatic monitoring and extension for long-running processes
-- **Parallelization**: Concurrent processing with semaphore-based limiting and thread pools
+- **Error Handling**: error classification + dead-letter routing (retries are delegated to SQS)
+- **Logging / Timing**: structured logging and per-message duration
+- **Bring your own**: idempotency, metrics, masking, etc. are application concerns — add them as your own middleware via the before/after hooks
 
 ## Key Features
 
@@ -32,9 +30,8 @@
 - 🔒 **Pydantic Validation:** Automatic message validation and serialization using SQSEvent models
 - 🔄 **Auto Async/Sync:** Write handlers as sync or async functions - framework handles both automatically
 - ⚡ **Middleware Presets:** One-line setup for production, development, or minimal configurations
-- 🛡️ **Enterprise Middleware:** Idempotency, error handling, circuit breakers, and DLQ management
-- 📊 **Telemetry & Metrics:** Built-in performance monitoring and Elasticsearch logging support
-- 🔧 **Load Balancing:** Intelligent message distribution and resource management
+- 🛡️ **Error Handling:** Error classification + dead-letter routing (retries delegated to SQS)
+- 🧩 **Middleware Hooks:** before/after hooks with balanced cleanup — compose your own logging/metrics
 - 🦾 **Partial Batch Failure:** Native support for AWS Lambda batch failure responses
 - 🔀 **FIFO & Standard Queues:** Full support for both SQS queue types with proper ordering
 - 🎯 **Flexible Matching:** Automatic field name normalization (camelCase ↔ snake_case)
@@ -53,14 +50,8 @@
 ## Installation
 
 ```bash
-# Basic installation
+# Installation (pydantic-only, no extras)
 pip install fastsqs
-
-# With DynamoDB support (for production idempotency)
-pip install fastsqs[dynamodb]
-
-# With telemetry support (for advanced logging)
-pip install fastsqs[telemetry]
 
 # With all optional features
 pip install fastsqs[all]
@@ -133,11 +124,8 @@ def lambda_handler(event, context):
 
 ```python
 # Production-ready setup in one line
-app.use_preset("production", 
-    dynamodb_table="my-idempotency-table",
-    max_concurrent=10,
-    retry_attempts=3
-)
+app = FastSQS(max_concurrent_messages=10)
+app.use_preset("production")
 
 # Development setup
 app.use_preset("development")
@@ -154,14 +142,13 @@ app = FastSQS(queue_type=QueueType.FIFO)
 
 # Individual middleware
 from fastsqs.middleware import (
-    TimingMsMiddleware, LoggingMiddleware, 
-    IdempotencyMiddleware, ErrorHandlingMiddleware,
-    ParallelizationMiddleware, QueueMetricsMiddleware
+    TimingMsMiddleware, LoggingMiddleware,
+    ErrorHandlingMiddleware, DeadLetterQueueMiddleware,
 )
-app.add_middleware(TimingMsMiddleware())
 app.add_middleware(LoggingMiddleware())
-app.add_middleware(IdempotencyMiddleware())
-app.add_middleware(QueueMetricsMiddleware())
+app.add_middleware(TimingMsMiddleware())
+app.add_middleware(ErrorHandlingMiddleware())
+app.add_middleware(DeadLetterQueueMiddleware())
 
 # Field Matching - automatically handles camelCase ↔ snake_case
 class UserEvent(SQSEvent):

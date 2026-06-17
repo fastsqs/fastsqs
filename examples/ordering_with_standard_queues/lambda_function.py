@@ -10,15 +10,9 @@ import json
 from typing import Dict, Any
 from datetime import datetime
 from fastsqs import FastSQS, SQSEvent
-from fastsqs.middleware import (
-    ParallelizationMiddleware, ParallelizationConfig
-)
 
-app = FastSQS()
-
-# Configure parallelization with order control
-config = ParallelizationConfig(max_concurrent_messages=10)
-app.add_middleware(ParallelizationMiddleware(config))
+# Concurrency is configured on the app itself.
+app = FastSQS(max_concurrent_messages=10)
 
 # In-memory locks for per-entity ordering
 entity_locks = {}
@@ -55,7 +49,7 @@ async def handle_order_event(msg: OrderEvent) -> Dict[str, Any]:
     Handle order events with per-order ordering but cross-order parallelization
     
     This achieves:
-    ✅ No duplicates (idempotency middleware)
+    ✅ No duplicates (application-level idempotency)
     ✅ Per-order sequential processing (application lock)
     ✅ Cross-order parallel processing (different orders process simultaneously)
     ✅ High throughput (not limited by FIFO queue constraints)

@@ -53,7 +53,7 @@ db_router = SQSRouter(key="db")
 router.subrouter("create", create_router)
 router.subrouter("write", db_router)
 
-app.add_middleware(LoggingMiddleware(mask_fields=["password"]))
+app.add_middleware(LoggingMiddleware())
 app.add_middleware(TimingMsMiddleware())
 
 app.include_router(router)

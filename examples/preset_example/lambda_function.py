@@ -12,12 +12,9 @@ class UserRegistration(SQSEvent):
     email: str
     timestamp: float = None
 
-app = FastSQS()
+app = FastSQS(max_concurrent_messages=15)
 
-app.use_preset("production",
-    max_concurrent=15,
-    visibility_timeout=45.0
-)
+app.use_preset("production")
 
 @app.route(OrderProcessing)
 async def process_order(msg: OrderProcessing) -> Dict[str, Any]:

@@ -90,7 +90,7 @@ order_router = SQSRouter()
 system_router = SQSRouter()
 
 # Add middleware to main app
-app.add_middleware(LoggingMiddleware(mask_fields=["password", "email"]))
+app.add_middleware(LoggingMiddleware())
 app.add_middleware(TimingMsMiddleware())
 
 # Include the nested routers

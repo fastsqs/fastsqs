@@ -3,9 +3,7 @@ import asyncio
 from typing import Dict, Any, List
 from fastsqs import FastSQS, SQSEvent
 from fastsqs.middleware import (
-    ErrorHandlingMiddleware, CircuitBreaker, DeadLetterQueueMiddleware,
-    VisibilityTimeoutMonitor, ProcessingTimeMiddleware,
-    ParallelizationMiddleware, ParallelizationConfig,
+    ErrorHandlingMiddleware, DeadLetterQueueMiddleware,
     TimingMsMiddleware, LoggingMiddleware
 )
 
@@ -23,39 +21,15 @@ class CriticalMessage(SQSEvent):
     critical_id: str
     priority: str = "high"
 
-app = FastSQS()
+# Concurrency is configured on the app; retries are handled by SQS (visibility
+# timeout + maxReceiveCount + native DLQ). The middleware below adds logging,
+# timing, error classification and dead-letter routing.
+app = FastSQS(max_concurrent_messages=5)
 
-# Configure comprehensive middleware stack. Retries are handled by SQS
-# (visibility timeout + redelivery); this middleware trips a circuit breaker
-# and routes terminal failures to the dead-letter handler.
-circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=60.0)
-error_middleware = ErrorHandlingMiddleware(circuit_breaker=circuit_breaker)
-dlq_middleware = DeadLetterQueueMiddleware(max_processing_time=300.0)
-
-visibility_monitor = VisibilityTimeoutMonitor(
-    warning_threshold=0.8,
-    default_visibility_timeout=30.0
-)
-processing_middleware = ProcessingTimeMiddleware()
-
-parallelization_config = ParallelizationConfig(
-    max_concurrent_messages=5,
-    use_thread_pool=True,
-    thread_pool_size=3,
-    batch_processing=True,
-    batch_size=10,
-    batch_timeout=5.0
-)
-parallel_middleware = ParallelizationMiddleware(parallelization_config)
-
-# Add middleware in order
 app.add_middleware(LoggingMiddleware())
 app.add_middleware(TimingMsMiddleware())
-app.add_middleware(error_middleware)
-app.add_middleware(dlq_middleware)
-app.add_middleware(visibility_monitor)
-app.add_middleware(processing_middleware)
-app.add_middleware(parallel_middleware)
+app.add_middleware(ErrorHandlingMiddleware())
+app.add_middleware(DeadLetterQueueMiddleware(max_processing_time=300.0))
 
 @app.route(OrderProcessing)
 async def process_order(msg: OrderProcessing) -> Dict[str, Any]:
@@ -105,20 +79,12 @@ def lambda_handler(event, context):
     try:
         # Process the SQS event
         result = app.handler(event, context)
-        
-        # Get middleware statistics
-        stats = {
-            "processing_stats": processing_middleware.get_stats() if hasattr(processing_middleware, 'get_stats') else {},
-            "parallelization_stats": parallel_middleware.get_stats() if hasattr(parallel_middleware, 'get_stats') else {}
-        }
-        
-        print(f"Processing completed. Stats: {json.dumps(stats, indent=2)}")
-        
+
         return {
             "statusCode": 200,
             "body": json.dumps({
                 "message": "Successfully processed messages",
-                "stats": stats
+                "batchItemFailures": result.get("batchItemFailures", []),
             })
         }
         

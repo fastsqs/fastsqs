@@ -38,7 +38,7 @@ app = FastSQS(
     message_type_key="action"
 )
 
-app.add_middleware(LoggingMiddleware(mask_fields=["password", "ssn"]))
+app.add_middleware(LoggingMiddleware())
 app.add_middleware(TimingMsMiddleware())
 
 
