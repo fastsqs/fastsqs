@@ -12,8 +12,6 @@ from .middleware import (
     Middleware,
     TimingMsMiddleware,
     LoggingMiddleware,
-    ErrorHandlingMiddleware,
-    DeadLetterQueueMiddleware,
 )
 from .events import SQSEvent
 from .presets import MiddlewarePreset
@@ -32,7 +30,5 @@ __all__ = [
     "TimingMsMiddleware",
     "LoggingMiddleware",
     "SQSEvent",
-    "ErrorHandlingMiddleware",
-    "DeadLetterQueueMiddleware",
     "MiddlewarePreset",
 ]
