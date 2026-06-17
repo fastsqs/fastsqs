@@ -66,6 +66,17 @@ async def invoke_handler(fn: Handler, **kwargs) -> Any:
     return result
 
 
+async def maybe_await(value: Any) -> Any:
+    """Await ``value`` if it is awaitable, else return it as-is.
+
+    Lets configurable callbacks be either sync or async without the caller
+    knowing which.
+    """
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
 def shallow_mask(d: dict, fields: List[str], mask: str = "***") -> dict:
     """Mask sensitive fields in a dictionary.
 

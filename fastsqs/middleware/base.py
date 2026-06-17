@@ -105,6 +105,12 @@ async def run_middlewares(
             await call_middleware_hook(mw, "before", payload, record, context, ctx)
     elif when == "after":
         for mw in reversed(mws):
-            await call_middleware_hook(mw, "after", payload, record, context, ctx, error)
+            try:
+                await call_middleware_hook(mw, "after", payload, record, context, ctx, error)
+            except Exception as hook_error:
+                # An after-hook must never abort the other middlewares' cleanup
+                # nor mask the original handler error (this chain runs inside
+                # app.py's finally block).
+                mw._log("error", "after middleware hook raised", error=str(hook_error))
     else:
         raise ValueError("when must be 'before' or 'after'")

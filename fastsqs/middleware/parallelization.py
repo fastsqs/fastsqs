@@ -23,21 +23,36 @@ class ConcurrencyLimiter:
             max_concurrent: Maximum number of concurrent operations
         """
         self.max_concurrent = max_concurrent
-        self.semaphore = asyncio.Semaphore(max_concurrent)
+        self._semaphore: Optional[asyncio.Semaphore] = None
+        self._loop = None
         self.active_count = 0
         self.waiting_count = 0
-    
+
+    def _get_semaphore(self) -> asyncio.Semaphore:
+        # Bind the semaphore lazily to the running loop: asyncio primitives bind
+        # to the loop at creation pre-3.10, and a semaphore cannot be reused
+        # across loops (each Lambda invocation runs a fresh asyncio.run()).
+        loop = asyncio.get_running_loop()
+        if self._semaphore is None or self._loop is not loop:
+            self._semaphore = asyncio.Semaphore(self.max_concurrent)
+            self._loop = loop
+            self.active_count = 0
+        return self._semaphore
+
     async def acquire(self) -> None:
+        semaphore = self._get_semaphore()
         self.waiting_count += 1
         try:
-            await self.semaphore.acquire()
+            await semaphore.acquire()
             self.active_count += 1
         finally:
             self.waiting_count -= 1
-    
+
     def release(self) -> None:
+        if self._semaphore is None:
+            return
         self.active_count = max(0, self.active_count - 1)
-        self.semaphore.release()
+        self._semaphore.release()
     
     @property
     def stats(self) -> Dict[str, int]:
@@ -116,7 +131,7 @@ class ParallelizationConfig:
         self.max_concurrent_messages = max_concurrent_messages
         self.max_concurrent_per_group = max_concurrent_per_group
         self.use_thread_pool = use_thread_pool
-        self.thread_pool_size = thread_pool_size or min(32, 5)
+        self.thread_pool_size = thread_pool_size or min(32, max_concurrent_messages)
         self.batch_processing = batch_processing
         self.batch_size = batch_size
         self.batch_timeout = batch_timeout
@@ -174,33 +189,16 @@ class ParallelizationMiddleware(Middleware):
         
         ctx["concurrency_wait_time"] = wait_time
         ctx["concurrency_stats"] = self.concurrency_limiter.stats
-        ctx["acquired_resources"] = {}
-        
+
         ctx["_parallelization_middleware"] = self
     
     async def after(self, payload: dict, record: dict, context: Any, ctx: dict, error: Optional[Exception]) -> None:
         msg_id = record.get("messageId", "UNKNOWN")
-        acquired_resources = ctx.get("acquired_resources", {})
-        
-        self._log("debug", f"Cleaning up resources", 
-                 msg_id=msg_id, resources=list(acquired_resources.keys()))
-        
-        for resource_name, resource in acquired_resources.items():
-            if resource_name in self.resource_pools:
-                await self.resource_pools[resource_name].release(resource)
-        
+
         self.concurrency_limiter.release()
-        self._log("debug", f"Concurrency slot released", 
+        self._log("debug", f"Concurrency slot released",
                  msg_id=msg_id, new_stats=self.concurrency_limiter.stats)
-    
-    async def acquire_resource(self, resource_name: str, ctx: dict) -> Any:
-        if resource_name not in self.resource_pools:
-            raise ValueError(f"Resource pool '{resource_name}' not found")
-        
-        resource = await self.resource_pools[resource_name].acquire()
-        ctx["acquired_resources"][resource_name] = resource
-        return resource
-    
+
     async def run_in_thread_pool(self, func: Callable, *args, **kwargs) -> Any:
         if not self.thread_pool:
             raise RuntimeError("Thread pool not enabled")
@@ -252,8 +250,8 @@ class ParallelizationMiddleware(Middleware):
     
     async def cleanup(self) -> None:
         for pool in self.resource_pools.values():
-            await pool.cleanup()
-        
+            pool.shutdown()
+
         if self.thread_pool:
             self.thread_pool.shutdown(wait=True)
         for timer in self.batch_timers.values():

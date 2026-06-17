@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import time
 import asyncio
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Awaitable, Dict, List, Optional, Callable, Union
 from .base import Middleware
+from ..utils import maybe_await
 
 
 class RetryConfig:
@@ -150,7 +151,7 @@ class ErrorHandlingMiddleware(Middleware):
         self,
         retry_config: Optional[RetryConfig] = None,
         circuit_breaker: Optional[CircuitBreaker] = None,
-        dead_letter_handler: Optional[Callable[[dict, dict, Exception], None]] = None,
+        dead_letter_handler: Optional[Callable[..., Union[None, Awaitable[None]]]] = None,
         error_classifier: Optional[Callable[[Exception], str]] = None
     ):
         """Initialize error handling middleware.
@@ -256,7 +257,7 @@ class ErrorHandlingMiddleware(Middleware):
             if self.dead_letter_handler:
                 try:
                     self._log("info", f"Calling dead letter handler", msg_id=msg_id)
-                    await self.dead_letter_handler(payload, record, error)
+                    await maybe_await(self.dead_letter_handler(payload, record, error))
                     self._log("info", f"Dead letter handler completed", msg_id=msg_id)
                 except Exception as dlq_error:
                     self._log("error", f"Dead letter handler failed", 
@@ -274,7 +275,7 @@ class DeadLetterQueueMiddleware(Middleware):
     
     def __init__(
         self,
-        dlq_handler: Optional[Callable[[dict, dict, Exception, dict], None]] = None,
+        dlq_handler: Optional[Callable[..., Union[None, Awaitable[None]]]] = None,
         max_processing_time: Optional[float] = None,
         include_context: bool = True
     ):
@@ -337,13 +338,13 @@ class DeadLetterQueueMiddleware(Middleware):
                          msg_id=msg_id, processing_time=processing_time, 
                          max_time=self.max_processing_time)
                 timeout_error = ProcessingTimeoutError(f"Processing exceeded {self.max_processing_time}s")
-                await self.dlq_handler(payload, record, timeout_error, ctx)
+                await maybe_await(self.dlq_handler(payload, record, timeout_error, ctx))
                 return
         
         if error and not ctx.get("should_retry", False):
             self._log("info", f"Sending to DLQ due to error", 
                      msg_id=msg_id, error_type=type(error).__name__)
-            await self.dlq_handler(payload, record, error, ctx)
+            await maybe_await(self.dlq_handler(payload, record, error, ctx))
         elif error:
             self._log("info", f"Error occurred but will retry", 
                      msg_id=msg_id, error_type=type(error).__name__)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import time
 import asyncio
-from typing import Any, Dict, Optional, List, Callable
+from typing import Any, Awaitable, Dict, Optional, List, Callable, Union
 from .base import Middleware
+from ..utils import maybe_await
 
 
 class VisibilityTimeoutMonitor(Middleware):
@@ -19,8 +20,8 @@ class VisibilityTimeoutMonitor(Middleware):
         self,
         default_visibility_timeout: float = 30.0,
         warning_threshold: float = 0.8,
-        extend_timeout_callback: Optional[Callable[[dict, dict, float], None]] = None,
-        timeout_warning_callback: Optional[Callable[[dict, dict, float, float], None]] = None
+        extend_timeout_callback: Optional[Callable[..., Union[None, Awaitable[None]]]] = None,
+        timeout_warning_callback: Optional[Callable[..., Union[None, Awaitable[None]]]] = None
     ):
         """Initialize visibility timeout monitor.
         
@@ -111,11 +112,11 @@ class VisibilityTimeoutMonitor(Middleware):
                 
                 if not ctx["visibility_warned"] and elapsed >= warning_time:
                     ctx["visibility_warned"] = True
-                    await self.timeout_warning_callback(payload, record, elapsed, visibility_timeout)
+                    await maybe_await(self.timeout_warning_callback(payload, record, elapsed, visibility_timeout))
                     
                     if self.extend_timeout_callback:
                         try:
-                            await self.extend_timeout_callback(payload, record, elapsed)
+                            await maybe_await(self.extend_timeout_callback(payload, record, elapsed))
                         except Exception as e:
                             self._log("warning", f"Failed to extend timeout", error=str(e))
                 
@@ -139,7 +140,7 @@ class ProcessingTimeMiddleware(Middleware):
         self,
         slow_processing_threshold: float = 10.0,
         store_detailed_metrics: bool = True,
-        metrics_callback: Optional[Callable[[dict], None]] = None
+        metrics_callback: Optional[Callable[..., Union[None, Awaitable[None]]]] = None
     ):
         """Initialize processing time middleware.
         
@@ -196,7 +197,7 @@ class ProcessingTimeMiddleware(Middleware):
             
             if self.metrics_callback:
                 try:
-                    await self.metrics_callback(metrics)
+                    await maybe_await(self.metrics_callback(metrics))
                 except Exception as e:
                     self._log("error", f"Metrics callback error", error=str(e))
 class QueueMetricsMiddleware(Middleware):
@@ -209,7 +210,7 @@ class QueueMetricsMiddleware(Middleware):
     def __init__(
         self,
         metrics_aggregation_window: float = 60.0,
-        emit_metrics_callback: Optional[Callable[[dict], None]] = None
+        emit_metrics_callback: Optional[Callable[..., Union[None, Awaitable[None]]]] = None
     ):
         """Initialize queue metrics middleware.
         
@@ -271,7 +272,7 @@ class QueueMetricsMiddleware(Middleware):
                 "visibility_timeout_violations": self._metrics["visibility_timeout_violations"]
             }
             
-            await self.emit_metrics_callback(aggregated_metrics)
+            await maybe_await(self.emit_metrics_callback(aggregated_metrics))
         
         self._metrics = {
             "messages_processed": 0,

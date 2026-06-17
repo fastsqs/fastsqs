@@ -504,14 +504,11 @@ class FastSQS:
         """
         try:
             asyncio.get_running_loop()
-            raise RuntimeError(
-                "FastSQS handler called from within event loop. Use async_handler() for testing."
-            )
-        except RuntimeError as e:
-            if "no running event loop" in str(e):
-                return asyncio.run(self._handle_event(event, context))
-            else:
-                raise
+        except RuntimeError:
+            return asyncio.run(self._handle_event(event, context))
+        raise RuntimeError(
+            "FastSQS.handler() called inside a running event loop; use async_handler() instead."
+        )
 
     async def async_handler(self, event: dict, context: Any) -> dict:
         """Asynchronous handler entry point for testing.
