@@ -1,32 +1,34 @@
 # Comprehensive FastSQS Example
 
-This example demonstrates the middleware features of FastSQS.
+This example demonstrates the core FastSQS features.
 
 ## Features Demonstrated
 
 ### 1. Concurrency
-Configured on the app itself: `FastSQS(max_concurrent_messages=5)`. Records in a
-batch are processed concurrently up to that limit (asyncio).
+Configured on the app: `FastSQS(max_concurrent_messages=5)`. Records in a batch
+are processed concurrently up to that limit (asyncio).
 
-### 2. Error Handling & Dead-Letter Routing
-- `ErrorHandlingMiddleware` — classifies errors (permanent vs temporary).
-- `DeadLetterQueueMiddleware` — routes terminal failures to a dead-letter
-  handler; can flag messages exceeding `max_processing_time`.
-
-> Retries are **not** performed in-process. SQS redelivers failed messages via
-> the visibility timeout + `maxReceiveCount`, with its own native dead-letter
-> queue — so the middleware fails fast and lets SQS redeliver.
-
-### 3. Logging & Timing
+### 2. Logging & Timing
 - `LoggingMiddleware` — structured JSON logging.
 - `TimingMsMiddleware` — per-message duration.
+
+### 3. Failure handling = SQS
+fastsqs reports failed records as `batchItemFailures`; the queue's **redrive
+policy** (`maxReceiveCount` → dead-letter target) makes SQS redeliver and then
+move poison messages to the DLQ automatically. There is no in-app DLQ
+middleware — dead-lettering is infrastructure (configure it on the queue, e.g.
+in Terraform).
+
+> Retries are **not** performed in-process. SQS redelivers via the visibility
+> timeout + `maxReceiveCount`, with its own native dead-letter queue.
 
 ## Middleware Stack
 
 1. **LoggingMiddleware** — structured logging
 2. **TimingMsMiddleware** — per-message timing
-3. **ErrorHandlingMiddleware** — error classification
-4. **DeadLetterQueueMiddleware** — dead-letter routing
+
+(Need error classification, metrics, idempotency, masking? Write a small
+`Middleware` subclass — see `examples/custom_middleware_example`.)
 
 ## Usage
 
@@ -37,24 +39,8 @@ python lambda_function.py
 
 ### AWS Lambda Deployment
 1. Package the code with dependencies
-2. Set IAM permissions for SQS (and your DLQ)
-3. Configure the SQS trigger with the desired queue
-
-## Configuration Options
-
-### Error Handling
-```python
-def my_dlq(payload, record, error):
-    ...  # ship to your DLQ / alerting
-
-app.add_middleware(ErrorHandlingMiddleware(dead_letter_handler=my_dlq))
-app.add_middleware(DeadLetterQueueMiddleware(max_processing_time=300.0))
-```
-
-### Concurrency
-```python
-app = FastSQS(max_concurrent_messages=5)
-```
+2. Set IAM permissions for SQS
+3. Configure the SQS trigger; set a redrive policy → DLQ on the source queue
 
 ## Message Routing
 
@@ -66,7 +52,7 @@ The example routes three event models by their `type` discriminator:
 
 ## Production Considerations
 
-1. **Monitoring**: integrate logging with CloudWatch or your system
-2. **Error Handling**: configure an SQS DLQ (redrive policy) + alerting
+1. **Dead-letter**: set a redrive policy (`maxReceiveCount` → DLQ) on the queue
+2. **Monitoring**: integrate logging with CloudWatch or your system
 3. **Concurrency**: tune `max_concurrent_messages` for your workload
 4. **Timeouts**: set the queue visibility timeout based on processing time

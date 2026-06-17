@@ -20,9 +20,8 @@
 
 ### 🏗️ Built-in Middleware
 
-- **Error Handling**: error classification + dead-letter routing (retries are delegated to SQS)
 - **Logging / Timing**: structured logging and per-message duration
-- **Bring your own**: idempotency, metrics, masking, etc. are application concerns — add them as your own middleware via the before/after hooks
+- **Bring your own**: error handling, idempotency, metrics, masking, etc. are application concerns — add them as your own middleware via the before/after hooks
 
 ## Key Features
 
@@ -30,9 +29,8 @@
 - 🔒 **Pydantic Validation:** Automatic message validation and serialization using SQSEvent models
 - 🔄 **Auto Async/Sync:** Write handlers as sync or async functions - framework handles both automatically
 - ⚡ **Middleware Presets:** One-line setup for production, development, or minimal configurations
-- 🛡️ **Error Handling:** Error classification + dead-letter routing (retries delegated to SQS)
-- 🧩 **Middleware Hooks:** before/after hooks with balanced cleanup — compose your own logging/metrics
-- 🦾 **Partial Batch Failure:** Native support for AWS Lambda batch failure responses
+- 🧩 **Middleware Hooks:** before/after hooks with balanced cleanup — compose your own logging/metrics/error handling
+- 🦾 **Partial Batch Failure:** Native `batchItemFailures` — failures are redelivered/dead-lettered by SQS (redrive policy)
 - 🔀 **FIFO & Standard Queues:** Full support for both SQS queue types with proper ordering
 - 🎯 **Flexible Matching:** Automatic field name normalization (camelCase ↔ snake_case)
 - 🏗️ **Nested Routing:** QueueRouter support for complex routing scenarios
@@ -141,14 +139,9 @@ app.use_preset("minimal")
 app = FastSQS(queue_type=QueueType.FIFO)
 
 # Individual middleware
-from fastsqs.middleware import (
-    TimingMsMiddleware, LoggingMiddleware,
-    ErrorHandlingMiddleware, DeadLetterQueueMiddleware,
-)
+from fastsqs.middleware import TimingMsMiddleware, LoggingMiddleware
 app.add_middleware(LoggingMiddleware())
 app.add_middleware(TimingMsMiddleware())
-app.add_middleware(ErrorHandlingMiddleware())
-app.add_middleware(DeadLetterQueueMiddleware())
 
 # Field Matching - automatically handles camelCase ↔ snake_case
 class UserEvent(SQSEvent):

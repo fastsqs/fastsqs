@@ -2,10 +2,7 @@ import json
 import asyncio
 from typing import Dict, Any, List
 from fastsqs import FastSQS, SQSEvent
-from fastsqs.middleware import (
-    ErrorHandlingMiddleware, DeadLetterQueueMiddleware,
-    TimingMsMiddleware, LoggingMiddleware
-)
+from fastsqs.middleware import TimingMsMiddleware, LoggingMiddleware
 
 # Define event models
 class OrderProcessing(SQSEvent):
@@ -21,15 +18,13 @@ class CriticalMessage(SQSEvent):
     critical_id: str
     priority: str = "high"
 
-# Concurrency is configured on the app; retries are handled by SQS (visibility
-# timeout + maxReceiveCount + native DLQ). The middleware below adds logging,
-# timing, error classification and dead-letter routing.
+# Concurrency is configured on the app. Failures are reported as partial batch
+# failures and handled by SQS (visibility timeout + maxReceiveCount + native
+# DLQ via the queue's redrive policy) — no in-app DLQ middleware needed.
 app = FastSQS(max_concurrent_messages=5)
 
 app.add_middleware(LoggingMiddleware())
 app.add_middleware(TimingMsMiddleware())
-app.add_middleware(ErrorHandlingMiddleware())
-app.add_middleware(DeadLetterQueueMiddleware(max_processing_time=300.0))
 
 @app.route(OrderProcessing)
 async def process_order(msg: OrderProcessing) -> Dict[str, Any]:

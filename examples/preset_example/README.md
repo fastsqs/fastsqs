@@ -13,10 +13,8 @@ app.use_preset("production")
 ```
 
 Includes:
-- LoggingMiddleware
+- LoggingMiddleware (with context)
 - TimingMsMiddleware
-- ErrorHandlingMiddleware (error classification)
-- DeadLetterQueueMiddleware (dead-letter routing)
 
 ### Development Preset
 ```python
@@ -26,7 +24,6 @@ app.use_preset("development")
 Includes:
 - LoggingMiddleware (verbose, includes record)
 - TimingMsMiddleware
-- ErrorHandlingMiddleware
 
 ### Minimal Preset
 ```python
