@@ -6,7 +6,7 @@ import traceback
 from typing import Callable, List, Optional
 
 from .base import Middleware
-from ..utils import shallow_mask
+from ..utils import deep_mask
 
 
 class LoggingMiddleware(Middleware):
@@ -95,7 +95,7 @@ class LoggingMiddleware(Middleware):
         }
 
         if self.include_payload:
-            entry["payload"] = shallow_mask(payload, self.mask_fields)
+            entry["payload"] = deep_mask(payload, self.mask_fields)
         if self.include_record:
             entry["record"] = record
         if self.include_context:
@@ -141,7 +141,7 @@ class LoggingMiddleware(Middleware):
             }
 
         if self.include_payload:
-            entry["payload"] = shallow_mask(payload, self.mask_fields)
+            entry["payload"] = deep_mask(payload, self.mask_fields)
         if self.include_record:
             entry["record"] = record
         if self.include_context:

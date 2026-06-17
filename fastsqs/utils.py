@@ -95,3 +95,23 @@ def shallow_mask(d: dict, fields: List[str], mask: str = "***") -> dict:
         if f in out:
             out[f] = mask
     return out
+
+
+def deep_mask(obj: Any, fields: List[str], mask: str = "***") -> Any:
+    """Recursively mask ``fields`` wherever they appear in nested dicts/lists.
+
+    Returns a new structure (input is not mutated). Unlike :func:`shallow_mask`,
+    this masks sensitive fields at any nesting depth — safer for logging payloads
+    that carry sensitive values under sub-objects (e.g. PII nested in a customer
+    object).
+    """
+    if not fields:
+        return obj
+    if isinstance(obj, dict):
+        return {
+            k: (mask if k in fields else deep_mask(v, fields, mask))
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [deep_mask(item, fields, mask) for item in obj]
+    return obj

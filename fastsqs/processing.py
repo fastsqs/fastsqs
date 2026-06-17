@@ -10,8 +10,8 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from .exceptions import RouteNotFound, InvalidMessage
-from .middleware import run_middlewares
+from .exceptions import RouteNotFound, InvalidMessage, BatchFailedError
+from .middleware import run_middleware_stack
 from .utils import group_records_by_message_group
 
 if TYPE_CHECKING:
@@ -86,28 +86,16 @@ class RecordProcessingMixin:
             }
             self._log("debug", "FIFO info", msg_id=msg_id, fifo_info=ctx["fifoInfo"])
 
-        err: Optional[Exception] = None
-        result: Any = None
-
-        self._log("debug", "Running 'before' middleware chain", msg_id=msg_id)
-        await run_middlewares(
-            self._middlewares, "before", payload, record, context, ctx
-        )
-        self._log("debug", "'before' middleware chain completed", msg_id=msg_id)
-
-        try:
-            handled = False
-
+        async def _route() -> Any:
             # Try main router first
             self._log("debug", "Trying main router", msg_id=msg_id)
             if await self._main_router.dispatch(
                 payload, record, context, ctx, root_payload=payload
             ):
                 self._log("debug", "Main router handled the message", msg_id=msg_id)
-                handled = True
-                result = ctx.get("handler_result")
+                return ctx.get("handler_result")
 
-            if not handled and self._routers:
+            if self._routers:
                 self._log(
                     "debug",
                     "Trying routers",
@@ -127,59 +115,45 @@ class RecordProcessingMixin:
                         self._log(
                             "debug", f"Router {i} handled the message", msg_id=msg_id
                         )
-                        handled = True
-                        result = ctx.get("handler_result")
-                        break
-                    else:
-                        self._log(
-                            "debug",
-                            f"Router {i} did not handle the message",
-                            msg_id=msg_id,
-                        )
+                        return ctx.get("handler_result")
+                    self._log(
+                        "debug",
+                        f"Router {i} did not handle the message",
+                        msg_id=msg_id,
+                    )
 
-            if not handled:
-                available_routes = list(self._main_router._pydantic_routes.keys())
-                available_routers = [r.key for r in self._routers]
-                discriminator = payload.get(self.message_type_key)
-                error_msg = (
-                    f"No handler found for message "
-                    f"({self.message_type_key}={discriminator!r}). "
-                    f"Available FastSQS routes: {available_routes}, "
-                    f"Available router keys: {available_routers}"
-                )
-                self._log(
-                    "error",
-                    error_msg,
-                    msg_id=msg_id,
-                    available_routes=available_routes,
-                    available_routers=available_routers,
-                )
-                raise RouteNotFound(error_msg)
-
-        except Exception as e:
+            available_routes = list(self._main_router._pydantic_routes.keys())
+            available_routers = [r.key for r in self._routers]
+            discriminator = payload.get(self.message_type_key)
+            error_msg = (
+                f"No handler found for message "
+                f"({self.message_type_key}={discriminator!r}). "
+                f"Available FastSQS routes: {available_routes}, "
+                f"Available router keys: {available_routers}"
+            )
             self._log(
                 "error",
-                "Handler error",
+                error_msg,
                 msg_id=msg_id,
-                error_type=type(e).__name__,
-                error=str(e),
+                available_routes=available_routes,
+                available_routers=available_routers,
             )
-            err = e
-            raise
-        finally:
-            self._log("debug", "Running 'after' middleware chain", msg_id=msg_id)
-            await run_middlewares(
-                self._middlewares, "after", payload, record, context, ctx, err
-            )
-            self._log("debug", "'after' middleware chain completed", msg_id=msg_id)
+            raise RouteNotFound(error_msg)
+
+        # before -> route -> after, with balanced cleanup: a before-hook raising
+        # still unwinds the middlewares that already entered (release slots,
+        # cancel monitors), and after-hook errors never mask the real failure.
+        result = await run_middleware_stack(
+            self._middlewares, payload, record, context, ctx, _route
+        )
 
         self._log("info", "Record processing completed successfully", msg_id=msg_id)
         return result
 
     async def _handle_event(self, event: dict, context: Any) -> dict:
         """Handle an SQS event with multiple records."""
-        records = event.get("Records", [])
-        if not records:
+        records = event.get("Records") or []
+        if not isinstance(records, list) or not records:
             return {"batchItemFailures": []}
 
         if self.debug:
@@ -187,9 +161,20 @@ class RecordProcessingMixin:
             self._log("info", "Processing event", queue_info=queue_info)
 
         if self.is_fifo_queue():
-            return await self._handle_fifo_event(records, context)
+            result = await self._handle_fifo_event(records, context)
         else:
-            return await self._handle_standard_event(records, context)
+            result = await self._handle_standard_event(records, context)
+
+        # When partial batch failure is disabled, ReportBatchItemFailures is not
+        # in play: any failure must fail the WHOLE batch so SQS redelivers every
+        # message. Returning empty failures here would tell SQS everything
+        # succeeded -> silent data loss.
+        if not self.enable_partial_batch_failure and result["batchItemFailures"]:
+            raise BatchFailedError(
+                f"{len(result['batchItemFailures'])} record(s) failed and "
+                "enable_partial_batch_failure is False; failing the whole batch"
+            )
+        return result
 
     async def _handle_standard_event(self, records: List[dict], context: Any) -> dict:
         """Handle records for a standard (non-FIFO) queue."""
@@ -224,8 +209,7 @@ class RecordProcessingMixin:
                     self._log(
                         "debug", "Record failed", msg_id=msg_id, error=str(result)
                     )
-                if self.enable_partial_batch_failure:
-                    failures.append({"itemIdentifier": msg_id})
+                failures.append({"itemIdentifier": msg_id})
             else:
                 msg_id = records[i].get("messageId", "UNKNOWN")
                 self._log("debug", "Record succeeded", msg_id=msg_id)
@@ -279,11 +263,10 @@ class RecordProcessingMixin:
                     # FIFO ordering: a failed message blocks the rest of its
                     # group. Stop here and report this record plus every record
                     # after it as failures so SQS redelivers the tail in order.
-                    if self.enable_partial_batch_failure:
-                        group_failures.extend(
-                            {"itemIdentifier": later.get("messageId", "UNKNOWN")}
-                            for later in group_records[idx:]
-                        )
+                    group_failures.extend(
+                        {"itemIdentifier": later.get("messageId", "UNKNOWN")}
+                        for later in group_records[idx:]
+                    )
                     break
 
             return group_failures

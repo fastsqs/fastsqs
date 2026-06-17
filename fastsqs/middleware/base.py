@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, Awaitable, List, Optional
+from typing import Any, Awaitable, Callable, List, Optional
 
 
 class Middleware:
@@ -114,3 +114,40 @@ async def run_middlewares(
                 mw._log("error", "after middleware hook raised", error=str(hook_error))
     else:
         raise ValueError("when must be 'before' or 'after'")
+
+
+async def run_middleware_stack(
+    mws: List[Middleware],
+    payload: dict,
+    record: dict,
+    context: Any,
+    ctx: dict,
+    call_inner: Callable[[], Awaitable[Any]],
+) -> Any:
+    """Run the before -> inner -> after middleware stack with balanced cleanup.
+
+    Only middlewares whose ``before`` completed are unwound (``after`` runs in
+    reverse) — even if a later ``before`` or the inner call raises. This keeps
+    enter/exit symmetric so resources acquired in ``before`` (e.g. a concurrency
+    slot, a monitor task) are always released. After-hooks are isolated: one
+    raising never aborts the others nor masks the original error, which is
+    re-raised after cleanup.
+    """
+    entered: List[Middleware] = []
+    err: Optional[Exception] = None
+    try:
+        for mw in mws:
+            await call_middleware_hook(mw, "before", payload, record, context, ctx)
+            entered.append(mw)
+        return await call_inner()
+    except Exception as e:
+        err = e
+        raise
+    finally:
+        for mw in reversed(entered):
+            try:
+                await call_middleware_hook(
+                    mw, "after", payload, record, context, ctx, err
+                )
+            except Exception as hook_error:
+                mw._log("error", "after middleware hook raised", error=str(hook_error))

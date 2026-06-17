@@ -5,7 +5,7 @@ AWS SQS messages with support for routing, middleware, validation, and more.
 """
 
 from .types import QueueType, Handler, RouteValue
-from .exceptions import RouteNotFound, InvalidMessage
+from .exceptions import RouteNotFound, InvalidMessage, BatchFailedError
 from .app import FastSQS
 from .routing import SQSRouter, RouteEntry
 from .middleware import (
@@ -33,6 +33,7 @@ __all__ = [
     "RouteValue",
     "RouteNotFound",
     "InvalidMessage",
+    "BatchFailedError",
     "FastSQS",
     "SQSRouter",
     "RouteEntry",

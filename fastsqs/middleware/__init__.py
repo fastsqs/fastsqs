@@ -1,6 +1,6 @@
 """Middleware components for FastSQS."""
 
-from .base import Middleware, run_middlewares
+from .base import Middleware, run_middlewares, run_middleware_stack
 from .timing import TimingMsMiddleware
 from .logging import LoggingMiddleware
 from .error_handling import ErrorHandlingMiddleware, CircuitBreaker, DeadLetterQueueMiddleware
@@ -9,6 +9,7 @@ from .parallelization import ParallelizationMiddleware, ConcurrencyLimiter, Reso
 
 __all__ = [
     "run_middlewares",
+    "run_middleware_stack",
     "Middleware",
     "TimingMsMiddleware",
     "LoggingMiddleware",

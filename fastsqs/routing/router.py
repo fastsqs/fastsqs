@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 from ..events import SQSEvent
 from ..exceptions import InvalidMessage
 from ..types import Handler, RouteValue
-from ..middleware import Middleware, run_middlewares
+from ..middleware import Middleware, run_middleware_stack
 from ..utils import invoke_handler
 from .entry import RouteEntry
 
@@ -318,11 +318,23 @@ class SQSRouter:
                 return True
 
         # Then try key-value based routing (original logic)
-        if self.key not in payload:
-            return False
-
         key_value = payload.get(self.key)
         if key_value is None:
+            # Discriminator missing or explicitly null: let the default handler
+            # (if any) catch it, mirroring the "no matching route" path below.
+            if self._default_handler:
+                await self._execute_handler(
+                    self._default_handler,
+                    None,
+                    [],
+                    payload,
+                    record,
+                    context,
+                    ctx,
+                    root_payload,
+                    parent_middlewares,
+                )
+                return True
             return False
 
         str_value = str(key_value)
@@ -422,10 +434,7 @@ class SQSRouter:
         else:
             handler_payload = payload
 
-        err: Optional[Exception] = None
-        await run_middlewares(all_mws, "before", handler_payload, record, context, ctx)
-
-        try:
+        async def _invoke() -> Any:
             if model is not None:
                 try:
                     msg = model.model_validate(payload)
@@ -458,11 +467,9 @@ class SQSRouter:
                 ctx=ctx,
             )
             ctx["handler_result"] = result
+            return result
 
-        except Exception as e:
-            err = e
-            raise
-        finally:
-            await run_middlewares(
-                all_mws, "after", handler_payload, record, context, ctx, err
-            )
+        # before -> invoke -> after, unwinding only middlewares that entered.
+        await run_middleware_stack(
+            all_mws, handler_payload, record, context, ctx, _invoke
+        )
