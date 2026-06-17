@@ -6,6 +6,12 @@ Tackle one at a time. `[done]` items are already shipped.
 - `[done]` Remove the legacy `run_middlewares` runner (it ran every `after` even
   when `before` didn't enter → unbalanced cleanup). Only the balanced
   `run_middleware_stack` remains.
+- `[done]` **P0 + P1.2 — dependency injection** via `fast-depends` (adopted, not
+  built). `@app.route(...)` passively applies `inject()` when a handler declares
+  `Depends(...)` params (no `@inject` needed); plain handlers are untouched.
+  Injected deps are type-checked. Validated on real Lambda. Cost: +fast-depends
+  +anyio, Python >= 3.10 (was 3.8). Annotation-based injection (#P1.2) now holds
+  for `Depends` params. `ctx` is still an untyped dict — see P1.3 below.
 
 ---
 

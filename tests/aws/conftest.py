@@ -38,7 +38,7 @@ def _build_zip(tmp: Path) -> bytes:
         [
             sys.executable, "-m", "pip", "install", "--target", str(build),
             "--platform", "manylinux2014_x86_64", "--python-version", "3.13",
-            "--only-binary=:all:", "pydantic>=2", "-q",
+            "--only-binary=:all:", "pydantic>=2", "fast-depends>=3", "-q",
         ],
         check=True,
     )
