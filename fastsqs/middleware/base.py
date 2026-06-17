@@ -77,45 +77,6 @@ def call_middleware_hook(mw: Middleware, hook: str, *args) -> Awaitable[None]:
     return _wrap()
 
 
-async def run_middlewares(
-    mws: List[Middleware],
-    when: str,
-    payload: dict,
-    record: dict,
-    context: Any,
-    ctx: dict,
-    error: Optional[Exception] = None,
-) -> None:
-    """Run middleware chain for specified phase.
-    
-    Args:
-        mws: List of middleware instances
-        when: Phase ('before' or 'after')
-        payload: Message payload
-        record: SQS record
-        context: Lambda context
-        ctx: Processing context
-        error: Exception if in 'after' phase with error
-        
-    Raises:
-        ValueError: If 'when' parameter is invalid
-    """
-    if when == "before":
-        for mw in mws:
-            await call_middleware_hook(mw, "before", payload, record, context, ctx)
-    elif when == "after":
-        for mw in reversed(mws):
-            try:
-                await call_middleware_hook(mw, "after", payload, record, context, ctx, error)
-            except Exception as hook_error:
-                # An after-hook must never abort the other middlewares' cleanup
-                # nor mask the original handler error (this chain runs inside
-                # app.py's finally block).
-                mw._log("error", "after middleware hook raised", error=str(hook_error))
-    else:
-        raise ValueError("when must be 'before' or 'after'")
-
-
 async def run_middleware_stack(
     mws: List[Middleware],
     payload: dict,
