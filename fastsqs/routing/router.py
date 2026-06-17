@@ -9,7 +9,7 @@ from ..events import SQSEvent
 from ..exceptions import InvalidMessage
 from ..types import Handler, RouteValue
 from ..middleware import Middleware, run_middleware_stack
-from ..utils import invoke_handler
+from ..utils import invoke_handler, maybe_inject
 from .entry import RouteEntry
 
 
@@ -117,7 +117,7 @@ class SQSRouter:
 
                 self._pydantic_routes[primary_type] = (
                     value,
-                    handler,
+                    maybe_inject(handler),
                     list(middlewares or []),
                 )
 
@@ -142,7 +142,7 @@ class SQSRouter:
         if value is None:
 
             def default_decorator(fn: Handler) -> Handler:
-                self._default_handler = fn
+                self._default_handler = maybe_inject(fn)
                 return fn
 
             return default_decorator
@@ -151,18 +151,19 @@ class SQSRouter:
         values = [value] if isinstance(value, (str, int)) else list(value)
 
         def value_decorator(fn: Handler) -> Handler:
+            injected = maybe_inject(fn)
             for v in values:
                 k = str(v)
                 if k in self._routes:
                     existing = self._routes[k]
                     if existing.handler is not None:
                         raise ValueError(f"Duplicate handler for {self.key}={k}")
-                    existing.handler = fn
+                    existing.handler = injected
                     existing.model = model
                     existing.middlewares = list(middlewares or [])
                 else:
                     self._routes[k] = RouteEntry(
-                        handler=fn, model=model, middlewares=list(middlewares or [])
+                        handler=injected, model=model, middlewares=list(middlewares or [])
                     )
             return fn
 
@@ -206,7 +207,7 @@ class SQSRouter:
             self._wildcard_handler = fn
             if "*" not in self._routes:
                 self._routes["*"] = RouteEntry(
-                    handler=fn, model=model, middlewares=list(middlewares or [])
+                    handler=maybe_inject(fn), model=model, middlewares=list(middlewares or [])
                 )
             return fn
 

@@ -4,6 +4,8 @@ This package provides a modern, FastAPI-inspired interface for handling
 AWS SQS messages with support for routing, middleware, validation, and more.
 """
 
+from fast_depends import Depends
+
 from .types import QueueType, Handler, RouteValue
 from .exceptions import RouteNotFound, InvalidMessage, BatchFailedError
 from .app import FastSQS
@@ -31,4 +33,5 @@ __all__ = [
     "LoggingMiddleware",
     "SQSEvent",
     "MiddlewarePreset",
+    "Depends",
 ]

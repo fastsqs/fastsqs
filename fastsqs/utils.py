@@ -5,7 +5,32 @@ from __future__ import annotations
 import inspect
 from typing import Any, Dict, List
 
+from fast_depends import inject as _fd_inject
+
 from .types import Handler
+
+
+def uses_depends(fn: Handler) -> bool:
+    """True if ``fn`` declares any fast-depends ``Depends(...)`` parameter."""
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (ValueError, TypeError):
+        return False
+    return any(type(p.default).__name__ == "Dependant" for p in params)
+
+
+def maybe_inject(fn: Handler) -> Handler:
+    """Passively wrap a handler with fast-depends ``inject()`` IFF it declares
+    ``Depends(...)`` params — so users get DI without writing ``@inject``.
+    Handlers with no dependencies are returned untouched (zero behaviour change).
+    """
+    if getattr(fn, "_fastsqs_injected", False):
+        return fn
+    if not uses_depends(fn):
+        return fn
+    wrapped = _fd_inject(fn)
+    setattr(wrapped, "_fastsqs_injected", True)
+    return wrapped
 
 
 def group_records_by_message_group(
@@ -54,14 +79,17 @@ def select_kwargs(fn: Handler, **candidates) -> Dict[str, Any]:
 
 
 async def invoke_handler(fn: Handler, **kwargs) -> Any:
-    kw = select_kwargs(fn, **kwargs)
-
-    if inspect.iscoroutinefunction(fn):
-        result = await fn(**kw)
+    # An injected handler (fast-depends) binds the params it declares and
+    # resolves its Depends(); it ignores the extra framework kwargs. A plain
+    # handler gets the name-matched subset via select_kwargs.
+    if getattr(fn, "_fastsqs_injected", False):
+        kw = kwargs
     else:
-        result = fn(**kw)
-        if inspect.isawaitable(result):
-            result = await result
+        kw = select_kwargs(fn, **kwargs)
+
+    result = fn(**kw)
+    if inspect.isawaitable(result):
+        result = await result
 
     return result
 
