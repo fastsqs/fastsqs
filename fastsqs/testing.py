@@ -68,10 +68,12 @@ def make_record(
     record: Dict[str, Any] = {"messageId": message_id, "body": _body_str(body)}
 
     attrs: Dict[str, Any] = dict(attributes or {})
+    # Real SQS system attributes are PascalCase — emit them faithfully so the
+    # client produces events identical to what the ESM delivers.
     if group_id is not None:
-        attrs.setdefault("messageGroupId", group_id)
+        attrs.setdefault("MessageGroupId", group_id)
     if deduplication_id is not None:
-        attrs.setdefault("messageDeduplicationId", deduplication_id)
+        attrs.setdefault("MessageDeduplicationId", deduplication_id)
     if attrs:
         record["attributes"] = attrs
 

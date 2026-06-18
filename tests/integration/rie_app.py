@@ -28,7 +28,7 @@ def lambda_handler(event, context):
     # FIFO fixtures carry messageGroupId but no real ARN; stamp a .fifo
     # event-source ARN so QueueType.AUTO exercises the FIFO ordering path.
     records = event.get("Records", [])
-    if any((r.get("attributes", {}) or {}).get("messageGroupId") for r in records):
+    if any((r.get("attributes", {}) or {}).get("MessageGroupId") for r in records):
         for r in records:
             r.setdefault(
                 "eventSourceARN", "arn:aws:sqs:us-east-1:000000000000:rie.fifo"

@@ -80,9 +80,11 @@ class RecordProcessingMixin:
 
         if queue_type == QueueType.FIFO:
             attributes = record.get("attributes", {})
+            # Real SQS system attributes are PascalCase (record-level keys are
+            # camelCase, but this sub-map is not).
             ctx.fifo_info = FifoInfo(
-                message_group_id=attributes.get("messageGroupId"),
-                message_deduplication_id=attributes.get("messageDeduplicationId"),
+                message_group_id=attributes.get("MessageGroupId"),
+                message_deduplication_id=attributes.get("MessageDeduplicationId"),
             )
             self._log("debug", "FIFO info", msg_id=msg_id, fifo_info=ctx.fifo_info)
 

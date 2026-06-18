@@ -70,14 +70,14 @@ def test_client_send_dict_body_is_json_encoded():
 def test_client_group_id_sets_fifo_arn():
     rec = make_record({"type": "t"}, group_id="g1")
     assert rec["eventSourceARN"].endswith(".fifo")
-    assert rec["attributes"]["messageGroupId"] == "g1"
+    assert rec["attributes"]["MessageGroupId"] == "g1"
 
 
 def test_client_explicit_event_source_arn_overrides_group_id_default():
     rec = make_record({"type": "t"}, group_id="g1", event_source_arn="arn:custom")
     assert rec["eventSourceARN"] == "arn:custom"
     # group_id is still recorded as an attribute even when the ARN is overridden.
-    assert rec["attributes"]["messageGroupId"] == "g1"
+    assert rec["attributes"]["MessageGroupId"] == "g1"
 
 
 # ---- message_attributes / attributes passthrough onto the wire keys ----
@@ -160,7 +160,7 @@ def test_make_event_wraps_records_and_recordspec_defaults():
     "kwargs,wire_key,expected",
     [
         ({"message_id": "mid-9"}, "messageId", "mid-9"),
-        ({"deduplication_id": "d1"}, "attributes", {"messageDeduplicationId": "d1"}),
+        ({"deduplication_id": "d1"}, "attributes", {"MessageDeduplicationId": "d1"}),
     ],
 )
 def test_make_record_kwargs_map_to_wire_keys(kwargs, wire_key, expected):

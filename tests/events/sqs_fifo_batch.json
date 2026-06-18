@@ -11,8 +11,7 @@
         "MessageGroupId": "group-A",
         "SenderId": "AIDAIENQZJOLO23YVJ4VO",
         "MessageDeduplicationId": "dedup-1",
-        "ApproximateFirstReceiveTimestamp": "1545082649185",
-        "messageGroupId": "group-A"
+        "ApproximateFirstReceiveTimestamp": "1545082649185"
       },
       "messageAttributes": {},
       "md5OfBody": "11111111111111111111111111111111",
@@ -31,8 +30,7 @@
         "MessageGroupId": "group-A",
         "SenderId": "AIDAIENQZJOLO23YVJ4VO",
         "MessageDeduplicationId": "dedup-2",
-        "ApproximateFirstReceiveTimestamp": "1545082649285",
-        "messageGroupId": "group-A"
+        "ApproximateFirstReceiveTimestamp": "1545082649285"
       },
       "messageAttributes": {},
       "md5OfBody": "22222222222222222222222222222222",
@@ -51,8 +49,7 @@
         "MessageGroupId": "group-A",
         "SenderId": "AIDAIENQZJOLO23YVJ4VO",
         "MessageDeduplicationId": "dedup-3",
-        "ApproximateFirstReceiveTimestamp": "1545082649385",
-        "messageGroupId": "group-A"
+        "ApproximateFirstReceiveTimestamp": "1545082649385"
       },
       "messageAttributes": {},
       "md5OfBody": "33333333333333333333333333333333",

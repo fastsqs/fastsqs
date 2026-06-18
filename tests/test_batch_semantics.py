@@ -15,7 +15,7 @@ class Task(SQSEvent):
 def _rec(mid, task_id, group=None):
     rec = {"messageId": mid, "body": json.dumps({"type": "task", "task_id": task_id})}
     if group is not None:
-        rec["attributes"] = {"messageGroupId": group}
+        rec["attributes"] = {"MessageGroupId": group}
     return rec
 
 

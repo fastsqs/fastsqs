@@ -53,7 +53,7 @@ def _rec(mid, task_id, group=None, *, arn=None):
         "body": json.dumps({"type": "task", "task_id": task_id}),
     }
     if group is not None:
-        rec["attributes"] = {"messageGroupId": group}
+        rec["attributes"] = {"MessageGroupId": group}
     if arn is not None:
         rec["eventSourceARN"] = arn
     elif group is not None:

@@ -48,7 +48,11 @@ def group_records_by_message_group(
 
     for record in records:
         attributes = record.get("attributes", {})
-        message_group_id = attributes.get("messageGroupId", "default")
+        # Real SQS events expose system attributes in PascalCase ("MessageGroupId");
+        # the record-level keys (messageId, body, ...) are camelCase, but this
+        # sub-map is not. Reading the wrong case silently collapses every record
+        # into one group, breaking FIFO isolation.
+        message_group_id = attributes.get("MessageGroupId", "default")
 
         if message_group_id not in groups:
             groups[message_group_id] = []

@@ -126,7 +126,7 @@ def test_fifo_failure_halts_group_and_marks_tail():
         return {
             "messageId": mid,
             "body": json.dumps({"type": "task", "task_id": task_id}),
-            "attributes": {"messageGroupId": "g"},
+            "attributes": {"MessageGroupId": "g"},
         }
 
     result = app.handler(
@@ -154,7 +154,7 @@ def test_fifo_failure_isolated_per_group():
         return {
             "messageId": mid,
             "body": json.dumps({"type": "task", "task_id": task_id}),
-            "attributes": {"messageGroupId": group},
+            "attributes": {"MessageGroupId": group},
         }
 
     result = app.handler(
