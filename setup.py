@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="fastsqs",
     version="1.1.1",
-    description="FastAPI-like, lightweight SQS message processing for Python (routing + middleware + dependency injection)",
+    description="A FastAPI-style router for AWS SQS on Lambda: pydantic routing, dependency injection, middleware, and native partial batch failure.",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     author="Gabriel LaFayette",
