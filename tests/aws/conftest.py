@@ -224,6 +224,214 @@ def pipeline(aws, deployed_lambda):
                 time.sleep(3)
 
 
+# Express enrichment: a Map over the batch array that injects service="enriched"
+# into each record's body via $merge, PRESERVING the SQS envelope (messageId,
+# attributes, eventSourceARN) — exactly what a faithful Pipes enrichment must do so
+# partial-batch-failure (keyed on messageId) survives the enrichment stage.
+_ENRICH_ASL = json.dumps(
+    {
+        "QueryLanguage": "JSONata",
+        "Comment": "e2e: inject service into body via $merge, preserve the SQS envelope.",
+        "StartAt": "EnrichBatch",
+        "States": {
+            "EnrichBatch": {
+                "Type": "Map",
+                "Items": "{% $states.input %}",
+                "ItemProcessor": {
+                    "ProcessorConfig": {"Mode": "INLINE"},
+                    "StartAt": "Inject",
+                    "States": {
+                        "Inject": {
+                            "Type": "Pass",
+                            "Output": "{% $merge([$states.input, {'body': $string($merge([$parse($states.input.body), {'service': 'enriched'}]))}]) %}",
+                            "End": True,
+                        }
+                    },
+                },
+                "End": True,
+            }
+        },
+    }
+)
+
+
+@pytest.fixture
+def pipe_pipeline(aws, deployed_lambda):
+    """Factory: SQS source (+DLQ) -> SFN Express enrichment -> EventBridge Pipe -> Lambda.
+
+    make(fifo=False, max_receive_count=2, visibility=120, *, fn=None, batch_size=10,
+         batching_window=0, start_stopped=False) -> (source_url, dlq_url[, start]).
+
+    The enrichment injects service="enriched" into each record body (preserving the
+    envelope). When ``start_stopped=True`` the pipe is created STOPPED and a 0-arg
+    ``start`` callback is appended — the deterministic co-batch lever: enqueue one
+    SendMessageBatch, then start() so the first poll grabs the group as one execution.
+    Tears down pipe -> state machine -> IAM roles -> queues.
+    """
+    session = boto3.Session(profile_name=PROFILE, region_name=REGION)
+    sqs, iam = aws["sqs"], aws["iam"]
+    lam = aws["lambda"]
+    sfn = session.client("stepfunctions")
+    pipes = session.client("pipes")
+
+    queues: list = []
+    roles: list = []  # (role_name, [policy_names])
+    state_machines: list = []  # arns
+    pipe_names: list = []
+
+    def _role(name, principal, policy_doc=None):
+        trust = {
+            "Version": "2012-10-17",
+            "Statement": [
+                {"Effect": "Allow", "Principal": {"Service": principal}, "Action": "sts:AssumeRole"}
+            ],
+        }
+        arn = iam.create_role(RoleName=name, AssumeRolePolicyDocument=json.dumps(trust))["Role"]["Arn"]
+        pols = []
+        if policy_doc:
+            iam.put_role_policy(RoleName=name, PolicyName="perms", PolicyDocument=json.dumps(policy_doc))
+            pols.append("perms")
+        roles.append((name, pols))
+        return arn
+
+    def make(fifo=False, max_receive_count=2, visibility=120, *, fn=None,
+             batch_size=10, batching_window=0, start_stopped=False):
+        fn_name = fn or deployed_lambda
+        fn_arn = lam.get_function(FunctionName=fn_name)["Configuration"]["FunctionArn"]
+        sfx = uuid.uuid4().hex[:8]
+        ext = ".fifo" if fifo else ""
+        fifo_attrs = {"FifoQueue": "true", "ContentBasedDeduplication": "true"} if fifo else {}
+
+        dlq_url = sqs.create_queue(
+            QueueName=f"fastsqs-e2e-pdlq-{sfx}{ext}", Attributes=dict(fifo_attrs)
+        )["QueueUrl"]
+        dlq_arn = sqs.get_queue_attributes(QueueUrl=dlq_url, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
+        src_url = sqs.create_queue(
+            QueueName=f"fastsqs-e2e-psrc-{sfx}{ext}",
+            Attributes={
+                **fifo_attrs,
+                "VisibilityTimeout": str(visibility),
+                "RedrivePolicy": json.dumps({"deadLetterTargetArn": dlq_arn, "maxReceiveCount": str(max_receive_count)}),
+            },
+        )["QueueUrl"]
+        src_arn = sqs.get_queue_attributes(QueueUrl=src_url, AttributeNames=["QueueArn"])["Attributes"]["QueueArn"]
+        # Track queues for teardown BEFORE the pipe is created (leak-proof).
+        queues.extend([src_url, dlq_url])
+
+        # Express enrichment SM (pure Pass/Map -> needs no service permissions).
+        sm_role = _role(f"fastsqs-e2e-sfnrole-{sfx}", "states.amazonaws.com")
+        sm_arn = None
+        for _ in range(20):  # IAM role propagation
+            try:
+                sm_arn = sfn.create_state_machine(
+                    name=f"fastsqs-e2e-enrich-{sfx}", definition=_ENRICH_ASL,
+                    roleArn=sm_role, type="EXPRESS",
+                )["stateMachineArn"]
+                break
+            except Exception:
+                time.sleep(3)
+        else:
+            raise RuntimeError("SFN did not accept the role in time")
+        state_machines.append(sm_arn)
+
+        # Pipe role: consume source, start the enrichment (sync), invoke the target.
+        pipe_role = _role(
+            f"fastsqs-e2e-piperole-{sfx}", "pipes.amazonaws.com",
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {"Effect": "Allow", "Action": ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"], "Resource": src_arn},
+                    {"Effect": "Allow", "Action": ["states:StartSyncExecution"], "Resource": sm_arn},
+                    {"Effect": "Allow", "Action": ["lambda:InvokeFunction"], "Resource": fn_arn},
+                ],
+            },
+        )
+
+        sqs_params = {"BatchSize": batch_size}
+        if batching_window and not fifo:
+            sqs_params["MaximumBatchingWindowInSeconds"] = batching_window
+        src_params = {"SqsQueueParameters": sqs_params}
+        pipe_name = f"fastsqs-e2e-pipe-{sfx}"
+        for _ in range(20):  # IAM role propagation
+            try:
+                pipes.create_pipe(
+                    Name=pipe_name, RoleArn=pipe_role,
+                    Source=src_arn, SourceParameters=src_params,
+                    Enrichment=sm_arn,
+                    Target=fn_arn,
+                    TargetParameters={"LambdaFunctionParameters": {"InvocationType": "REQUEST_RESPONSE"}},
+                    DesiredState="STOPPED" if start_stopped else "RUNNING",
+                )
+                break
+            except Exception:
+                time.sleep(3)
+        else:
+            raise RuntimeError("Pipe did not accept the roles in time")
+        pipe_names.append(pipe_name)
+
+        def _wait(target_state):
+            cur = None
+            for _ in range(50):
+                cur = pipes.describe_pipe(Name=pipe_name)["CurrentState"]
+                if cur == target_state:
+                    return
+                if cur.endswith("FAILED"):
+                    reason = pipes.describe_pipe(Name=pipe_name).get("StateReason")
+                    raise RuntimeError(f"pipe {pipe_name} -> {cur}: {reason}")
+                time.sleep(3)
+            raise RuntimeError(f"pipe {pipe_name} not {target_state} in time (last={cur})")
+
+        def start():
+            pipes.start_pipe(Name=pipe_name)
+            _wait("RUNNING")
+
+        _wait("STOPPED" if start_stopped else "RUNNING")
+
+        parts = [src_url, dlq_url]
+        if start_stopped:
+            parts.append(start)
+        return tuple(parts)
+
+    yield make
+
+    # Teardown order: pipe (references SM/queue/lambda) -> SM -> roles -> queues.
+    for name in pipe_names:
+        try:
+            pipes.delete_pipe(Name=name)
+        except Exception:
+            pass
+    for name in pipe_names:
+        for _ in range(50):
+            try:
+                pipes.describe_pipe(Name=name)
+                time.sleep(3)
+            except Exception:
+                break
+    for arn in state_machines:
+        try:
+            sfn.delete_state_machine(stateMachineArn=arn)
+        except Exception:
+            pass
+    for name, pols in roles:
+        for p in pols:
+            try:
+                iam.delete_role_policy(RoleName=name, PolicyName=p)
+            except Exception:
+                pass
+        try:
+            iam.delete_role(RoleName=name)
+        except Exception:
+            pass
+    time.sleep(3)
+    for url in queues:
+        for _ in range(4):
+            try:
+                sqs.delete_queue(QueueUrl=url)
+                break
+            except Exception:
+                time.sleep(3)
+
+
 def _drainer(sqs, with_attrs):
     def _drain(url, timeout=120, min_count=1, predicate=None):
         got = []

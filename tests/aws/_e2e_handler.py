@@ -120,7 +120,7 @@ def _recv_count(ctx: Context) -> int:
 
 
 @app.route(Task)
-async def handle(msg: Task, ctx: Context, marker: str = Depends(get_marker)):
+async def handle(msg: Task, ctx: Context, payload: dict, marker: str = Depends(get_marker)):
     enter_ts = time.time()
     tid = msg.task_id
 
@@ -150,6 +150,11 @@ async def handle(msg: Task, ctx: Context, marker: str = Depends(get_marker)):
     if tid.startswith("fail-once"):
         if _recv_count(ctx) == 1:
             raise ValueError(f"fail-once first delivery {tid}")
+
+    if tid == "svc-check" and (payload or {}).get("service") != "enriched":
+        # Proves the Pipe's SFN enrichment injected `service` into the body and it
+        # reached the target. Without enrichment this record dead-letters.
+        raise ValueError(f"enrichment did not inject service into body: {payload}")
 
     if tid.startswith("boom"):
         raise ValueError(f"boom {tid}")
