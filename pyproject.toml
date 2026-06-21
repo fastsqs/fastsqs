@@ -39,11 +39,11 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/imgabrieldev/fastsqs"
-Documentation = "https://github.com/imgabrieldev/fastsqs#readme"
-Changelog = "https://github.com/imgabrieldev/fastsqs/blob/main/CHANGELOG.md"
-Repository = "https://github.com/imgabrieldev/fastsqs"
-Issues = "https://github.com/imgabrieldev/fastsqs/issues"
+Homepage = "https://github.com/fastsqs/fastsqs"
+Documentation = "https://github.com/fastsqs/fastsqs#readme"
+Changelog = "https://github.com/fastsqs/fastsqs/blob/main/CHANGELOG.md"
+Repository = "https://github.com/fastsqs/fastsqs"
+Issues = "https://github.com/fastsqs/fastsqs/issues"
 
 [tool.setuptools.packages.find]
 include = ["fastsqs*"]

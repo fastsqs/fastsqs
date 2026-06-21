@@ -8,7 +8,7 @@ injection, a middleware system, and native partial batch failure.
 [![Python](https://img.shields.io/pypi/pyversions/fastsqs.svg)](https://pypi.org/project/fastsqs/)
 [![License: MIT](https://img.shields.io/pypi/l/fastsqs.svg)](LICENSE)
 
-[Documentation](https://github.com/imgabrieldev/fastsqs#readme) · [Changelog](https://github.com/imgabrieldev/fastsqs/blob/main/CHANGELOG.md) · [Source](https://github.com/imgabrieldev/fastsqs) · [Issues](https://github.com/imgabrieldev/fastsqs/issues)
+[Documentation](https://github.com/fastsqs/fastsqs#readme) · [Changelog](https://github.com/fastsqs/fastsqs/blob/main/CHANGELOG.md) · [Source](https://github.com/fastsqs/fastsqs) · [Issues](https://github.com/fastsqs/fastsqs/issues)
 
 ---
 
@@ -281,15 +281,15 @@ For hand-built events, `fastsqs.testing` also exports `make_record(...)` and
 ## Examples
 
 Runnable end-to-end samples (handler + Dockerfile + tests) live in
-[`examples/`](https://github.com/imgabrieldev/fastsqs/tree/main/examples):
+[`examples/`](https://github.com/fastsqs/fastsqs/tree/main/examples):
 
-- [simple_standard_example](https://github.com/imgabrieldev/fastsqs/tree/main/examples/simple_standard_example): minimal standard-queue app
-- [simple_fifo_example](https://github.com/imgabrieldev/fastsqs/tree/main/examples/simple_fifo_example): FIFO with per-group ordering
-- [nested_example](https://github.com/imgabrieldev/fastsqs/tree/main/examples/nested_example): routers & subrouters
-- [custom_middleware_example](https://github.com/imgabrieldev/fastsqs/tree/main/examples/custom_middleware_example): writing middleware
-- [comprehensive_example](https://github.com/imgabrieldev/fastsqs/tree/main/examples/comprehensive_example): routing + DI + middleware together
+- [simple_standard_example](https://github.com/fastsqs/fastsqs/tree/main/examples/simple_standard_example): minimal standard-queue app
+- [simple_fifo_example](https://github.com/fastsqs/fastsqs/tree/main/examples/simple_fifo_example): FIFO with per-group ordering
+- [nested_example](https://github.com/fastsqs/fastsqs/tree/main/examples/nested_example): routers & subrouters
+- [custom_middleware_example](https://github.com/fastsqs/fastsqs/tree/main/examples/custom_middleware_example): writing middleware
+- [comprehensive_example](https://github.com/fastsqs/fastsqs/tree/main/examples/comprehensive_example): routing + DI + middleware together
 
-See the [roadmap](https://github.com/imgabrieldev/fastsqs/blob/main/docs/ROADMAP.md) for what's next.
+See the [roadmap](https://github.com/fastsqs/fastsqs/blob/main/docs/ROADMAP.md) for what's next.
 
 ## Exceptions
 
@@ -302,7 +302,7 @@ All errors derive from `FastSQSError`:
 ## Contributing
 
 Issues and PRs are welcome. Open an issue at
-[github.com/imgabrieldev/fastsqs/issues](https://github.com/imgabrieldev/fastsqs/issues)
+[github.com/fastsqs/fastsqs/issues](https://github.com/fastsqs/fastsqs/issues)
 to discuss anything non-trivial first. Dev setup:
 
 ```bash
