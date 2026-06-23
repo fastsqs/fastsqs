@@ -9,8 +9,32 @@ dependency-free:
 """
 
 import os
+from pathlib import Path
 
 import pytest
+
+_TESTS_DIR = Path(__file__).parent
+
+# Opt-in tiers live in their own directories and pull in heavy optional deps
+# (e.g. tests/aws imports boto3 at conftest import time). Skipping their items
+# at run time isn't enough — pytest imports a directory's conftest while
+# *collecting* it, before any skip applies. So we refuse to descend into these
+# directories unless their flag/env is set, keeping the default run dep-free.
+_OPT_IN_DIRS = {
+    "aws": ("--run-aws", "RUN_AWS"),
+    "integration": ("--run-integration", "RUN_INTEGRATION"),
+}
+
+
+def pytest_ignore_collect(collection_path, config):
+    try:
+        top = collection_path.relative_to(_TESTS_DIR).parts[0]
+    except (ValueError, IndexError):
+        return None
+    gate = _OPT_IN_DIRS.get(top)
+    if gate and not (config.getoption(gate[0]) or os.getenv(gate[1])):
+        return True
+    return None
 
 
 def pytest_addoption(parser):

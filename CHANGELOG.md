@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.3 - 2026-06-22
+
+Docs & packaging only — no behavior change.
+
+### Packaging
+- Repointed `project_urls` to the `fastsqs` org after the repository transfer,
+  and set **Documentation** to the docs site <https://fastsqs.github.io> instead
+  of the GitHub README. The 1.1.2 PyPI page still linked to the old
+  `imgabrieldev/fastsqs` repo; this release corrects the sidebar links.
+- Added a `docs` optional-dependency extra (`mkdocs-material`,
+  `mkdocstrings[python]`) for building the documentation site.
+
+### Docs
+- Trimmed the README to a concise overview that links out to the full docs site.
+
+### Internal
+- Annotated the `**data` kwargs on `LoggingMiddleware.log` as `Any` (typing only).
+
+### Tests
+- The default `pytest` run no longer descends into the opt-in `tests/aws` and
+  `tests/integration` tiers, so it stays dependency-free (the AWS tier imports
+  `boto3` at conftest load). Run them explicitly with `--run-aws` /
+  `--run-integration`. Unblocks the tag-driven release workflow's test gate.
+
 ## 1.1.2 - 2026-06-20
 
 Docs & packaging only — no code change.
