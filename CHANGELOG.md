@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.5 - 2026-07-13
+
+### Fixed
+- `handler()` no longer strips the calling thread of its registered event
+  loop. It previously ran each batch through `asyncio.run()`, which closes
+  the loop and unregisters it from the thread on exit; any loop consumer
+  running later in the same process broke (e.g. Mangum serving an API
+  Gateway request after an SQS batch in the same Lambda sandbox raised
+  `RuntimeError: There is no current event loop`). `handler()` now owns a
+  persistent per-thread loop, created once and reused across invocations,
+  and re-registers it with `asyncio.set_event_loop` on every call, so a
+  foreign `asyncio.run()` in the same thread cannot strip it permanently.
+  Calling `handler()` inside a running loop still raises and points to
+  `async_handler()`.
+
 ## 1.1.4 - 2026-06-23
 
 Docs only — no code change.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from typing import Any, Callable, List, Literal, Optional, Type
 
 from .events import SQSEvent
@@ -62,6 +63,7 @@ class FastSQS(RecordProcessingMixin):
 
         self._routers: List[SQSRouter] = []
         self._middlewares: List[Middleware] = []
+        self._loops = threading.local()
 
     def route(
         self,
@@ -148,10 +150,29 @@ class FastSQS(RecordProcessingMixin):
         try:
             asyncio.get_running_loop()
         except RuntimeError:
-            return asyncio.run(self._handle_event(event, context))
+            return self._thread_loop().run_until_complete(
+                self._handle_event(event, context)
+            )
         raise RuntimeError(
             "FastSQS.handler() called inside a running event loop; use async_handler() instead."
         )
+
+    def _thread_loop(self) -> asyncio.AbstractEventLoop:
+        """Persistent per-thread event loop for ``handler()``.
+
+        ``asyncio.run()`` would close its loop and unregister the thread's
+        loop on every batch, breaking loop consumers that run after fastsqs
+        in the same process (e.g. an ASGI adapter multiplexed in the same
+        Lambda). The owned loop stays open and registered for reuse.
+        """
+        loop = getattr(self._loops, "loop", None)
+        if loop is None or loop.is_closed():
+            loop = asyncio.new_event_loop()
+            self._loops.loop = loop
+        # Incondicional: outro asyncio.run no processo pode ter desregistrado
+        # o loop da thread entre invocacoes.
+        asyncio.set_event_loop(loop)
+        return loop
 
     async def async_handler(self, event: dict | list, context: Any) -> dict:
         """Asynchronous handler entry point for testing.
