@@ -1,8 +1,9 @@
 name: docs
 
-# Build the MkDocs site and publish it to the fastsqs/fastsqs.github.io repo,
-# which serves at https://fastsqs.github.io. Runs on pushes to main that touch
-# the docs or their inputs.
+# Validates the MkDocs build on pushes to main that touch the docs or their
+# inputs. Publication lives in fastsqs/fastsqs.github.io (publish.yml, Pages
+# via OIDC): the org disabled deploy keys, so this repo cannot push there.
+# After a release, trigger that workflow manually or wait for its daily cron.
 on:
   push:
     branches: [main]
@@ -22,8 +23,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-deploy:
-    name: build and deploy docs
+  build:
+    name: build docs (strict)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -38,11 +39,3 @@ jobs:
           pip install -e ".[docs]"
       - name: Build site (strict)
         run: mkdocs build --strict
-      - name: Publish to fastsqs.github.io
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
-          external_repository: fastsqs/fastsqs.github.io
-          publish_dir: ./site
-          publish_branch: gh-pages
-          commit_message: "docs: deploy from fastsqs/fastsqs@${{ github.sha }}"
