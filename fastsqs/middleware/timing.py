@@ -3,6 +3,7 @@
 import logging
 import time
 
+from ..exceptions import SkipMessage
 from .base import Middleware
 
 _logger = logging.getLogger("fastsqs")
@@ -39,7 +40,10 @@ class TimingMiddleware(Middleware):
         if start is not None:
             duration_ms = round((time.perf_counter_ns() - start) / 1_000_000, 3)
             ctx.state[self.store_key_ms] = duration_ms
-            status = "FAILED" if error else "SUCCESS"
+            if isinstance(error, SkipMessage):
+                status = "SKIPPED"
+            else:
+                status = "FAILED" if error else "SUCCESS"
             _logger.info(
                 "Processing completed msg_id=%s status=%s duration_ms=%s",
                 msg_id, status, duration_ms,

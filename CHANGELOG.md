@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.2.0 - 2026-07-17
+
+Standard event envelopes and consumer-side delivery guarantees: CloudEvents
+1.0 support, metadata+data envelope routing, idempotent consumption, and W3C
+trace propagation. Additive only — no defaults changed; flat payloads and
+class-name route keys keep working exactly as before.
+
+### Added
+- `__message_type__` on `SQSEvent`: set it to decouple the route key from the
+  class name, enabling namespaced/versioned types such as
+  `com.acme.payment.approved.v1` on pydantic routes. Own-class only (never
+  inherited); under `flexible_matching` an override matches its exact value
+  (no case/format variants).
+- Dot-path discriminators: `FastSQS(discriminator="metadata.eventType")` (and
+  `SQSRouter(...)`) now traverse nested dicts, making
+  `{"metadata": {...}, "data": {...}}` envelopes routable. A `.` in the
+  discriminator always means traversal.
+- `CloudEvent[T]`: generic pydantic base with the CloudEvents 1.0 attributes
+  (`specversion`, `id`, `source`, `type`, `time`, `subject`,
+  `datacontenttype`, `dataschema`) and a typed `data`. Spec extension
+  attributes (e.g. `traceparent`) are preserved via `extra="allow"`.
+- `SkipMessage`: raise from a middleware `before` or from a handler to ack the
+  record as success without (further) processing — never reported as a batch
+  item failure, never redelivered. Deliberately NOT a `FastSQSError`, so
+  blanket error handling cannot swallow an ack.
+- `IdempotencyMiddleware`: consumer-side dedup for at-least-once delivery,
+  keyed by a payload path (`key_path="id"` by default, dot-paths supported).
+  Three-state acquire: completed duplicates skip, in-flight duplicates fail
+  with the new `IdempotencyInProgressError` (so SQS redelivers after the
+  in-flight attempt settles), and dead workers' claims expire via the
+  IN_PROGRESS lease. Storage is pluggable behind the structural
+  `IdempotencyStore` protocol (`try_acquire`/`mark_complete`/`forget`;
+  `AcquireResult` enum) — `InMemoryIdempotencyStore` ships for tests/dev.
+- `TracingMiddleware`: parses W3C `traceparent`/`tracestate` from SQS message
+  attributes (case-insensitive), falling back to top-level payload keys (the
+  CloudEvents extension convention), into a typed `TraceContext` at
+  `ctx.state.trace`. Malformed values are ignored — tracing never fails a
+  record.
+
+### Changed
+- `TimingMiddleware` logs `status=SKIPPED` (instead of `FAILED`) for records
+  acked via `SkipMessage`.
+
 ## 1.1.5 - 2026-07-13
 
 ### Fixed

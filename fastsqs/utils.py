@@ -33,6 +33,23 @@ def maybe_inject(fn: Handler) -> Handler:
     return wrapped
 
 
+def resolve_payload_path(payload: dict, path: str) -> Any:
+    """Resolve a discriminator path against a payload.
+
+    A ``.`` in ``path`` ALWAYS means nested traversal (``"metadata.eventType"``
+    reads ``payload["metadata"]["eventType"]``) — never a literal flat key.
+    Returns ``None`` when any segment is missing or a non-dict is hit mid-path.
+    """
+    if "." not in path:
+        return payload.get(path)
+    current: Any = payload
+    for segment in path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(segment)
+    return current
+
+
 def group_records_by_message_group(
     records: List[dict]
 ) -> Dict[str, List[dict]]:

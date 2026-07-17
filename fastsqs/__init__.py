@@ -13,6 +13,8 @@ from .exceptions import (
     RouteNotFoundError,
     InvalidMessageError,
     BatchFailedError,
+    IdempotencyInProgressError,
+    SkipMessage,
 )
 from .app import FastSQS
 from .routing import SQSRouter
@@ -21,13 +23,20 @@ from .middleware import (
     Middleware,
     TimingMiddleware,
     LoggingMiddleware,
+    AcquireResult,
+    IdempotencyMiddleware,
+    IdempotencyStore,
+    InMemoryIdempotencyStore,
+    TraceContext,
+    TracingMiddleware,
 )
-from .events import SQSEvent
+from .events import SQSEvent, CloudEvent
 
 __all__ = [
     "FastSQS",
     "SQSRouter",
     "SQSEvent",
+    "CloudEvent",
     "is_sqs_event",
     "Context",
     "State",
@@ -37,8 +46,16 @@ __all__ = [
     "Middleware",
     "TimingMiddleware",
     "LoggingMiddleware",
+    "AcquireResult",
+    "IdempotencyMiddleware",
+    "IdempotencyStore",
+    "InMemoryIdempotencyStore",
+    "TraceContext",
+    "TracingMiddleware",
     "FastSQSError",
     "RouteNotFoundError",
     "InvalidMessageError",
     "BatchFailedError",
+    "IdempotencyInProgressError",
+    "SkipMessage",
 ]

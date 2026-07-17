@@ -87,6 +87,9 @@ nav:
       - Choose a FIFO failure mode: guide/fifo-failure-modes.md
       - Write middleware: guide/middleware.md
       - Use built-in middleware: guide/builtin-middleware.md
+      - Consume standard envelopes: guide/standard-envelopes.md
+      - Deduplicate with idempotency: guide/idempotency.md
+      - Propagate trace context: guide/tracing.md
       - Consume EventBridge Pipes events: guide/eventbridge-pipes.md
       - Multiplex SQS and API Gateway: guide/multiplexing.md
       - Test handlers in-process: guide/testing.md

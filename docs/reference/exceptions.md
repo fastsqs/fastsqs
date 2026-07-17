@@ -1,6 +1,8 @@
 # Exceptions
 
-The exception hierarchy, all deriving from FastSQSError.
+The exception hierarchy. Every fastsqs *error* derives from `FastSQSError`;
+`SkipMessage` deliberately does not — it is a control-flow ack signal, not an
+error, so a blanket `except FastSQSError` can never swallow it.
 
 ::: fastsqs.FastSQSError
 
@@ -9,3 +11,7 @@ The exception hierarchy, all deriving from FastSQSError.
 ::: fastsqs.InvalidMessageError
 
 ::: fastsqs.BatchFailedError
+
+::: fastsqs.IdempotencyInProgressError
+
+::: fastsqs.SkipMessage

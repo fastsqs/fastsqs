@@ -37,9 +37,12 @@ own redrive policy, not by bespoke in-app code.
 
 - **FastAPI-style routing**: `@app.route(OrderCreated)` dispatches by a payload discriminator (default key `"type"`).
 - **Pydantic validation**: handlers receive a validated `SQSEvent` model; bad messages become clean batch failures.
+- **Standard envelopes**: opt-in `CloudEvent[T]` base (CloudEvents 1.0), dot-path discriminators for `metadata`+`data` envelopes, and `__message_type__` for namespaced/versioned route keys (`com.acme.payment.approved.v1`).
 - **Dependency injection**: declare `Depends(...)` params (powered by `fast-depends`); no `@inject` needed.
 - **Typed `Context`**: `ctx.message_id`, `ctx.queue_type`, and more as typed attributes; arbitrary scratch in `ctx.state`.
 - **Middleware**: `before`/`after` hooks with balanced unwind (resources acquired in `before` are always released).
+- **Idempotency**: `IdempotencyMiddleware` dedups at-least-once delivery behind a structural `IdempotencyStore` protocol (in-memory store included); raise `SkipMessage` anywhere to ack a record without processing.
+- **Tracing**: `TracingMiddleware` reads W3C `traceparent` from message attributes into a typed `ctx.state.trace`.
 - **Partial batch failure**: native `ReportBatchItemFailures` for standard and FIFO queues.
 - **FIFO-aware**: queue type is inferred from the event-source ARN; per-group ordering with a configurable failure mode.
 - **EventBridge Pipes ready**: `app.handler` accepts both the Lambda `{"Records": [...]}` envelope and a bare list of records.

@@ -8,7 +8,7 @@ from ..exceptions import InvalidMessageError
 from ..types import Handler, RouteValue
 from ..middleware import Middleware
 from ..middleware.base import _run_middleware_stack
-from ..utils import invoke_handler, maybe_inject
+from ..utils import invoke_handler, maybe_inject, resolve_payload_path
 from .entry import _RouteEntry
 
 if TYPE_CHECKING:
@@ -293,7 +293,7 @@ class SQSRouter:
         # Route through _execute_handler so router-level and per-route
         # middlewares run for pydantic routes exactly as they do for
         # key-value routes (validation + InvalidMessageError handling included).
-        message_type = payload.get(self.discriminator)
+        message_type = resolve_payload_path(payload, self.discriminator)
         if message_type:
             pydantic_route = self._find_pydantic_route(message_type)
             if pydantic_route:
@@ -313,7 +313,7 @@ class SQSRouter:
                 return True
 
         # Then try key-value based routing
-        key_value = payload.get(self.discriminator)
+        key_value = message_type
         if key_value is None:
             # Discriminator missing or explicitly null: let the default handler
             # (if any) catch it, mirroring the "no matching route" path below.

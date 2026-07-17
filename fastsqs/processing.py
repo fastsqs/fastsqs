@@ -10,10 +10,15 @@ import asyncio
 import json
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from .exceptions import RouteNotFoundError, InvalidMessageError, BatchFailedError
+from .exceptions import (
+    RouteNotFoundError,
+    InvalidMessageError,
+    BatchFailedError,
+    SkipMessage,
+)
 from .middleware.base import _run_middleware_stack
 from .types import Context, FifoInfo, QueueType
-from .utils import group_records_by_message_group
+from .utils import group_records_by_message_group, resolve_payload_path
 
 if TYPE_CHECKING:
     from .middleware import Middleware
@@ -145,7 +150,7 @@ class RecordProcessingMixin:
 
             available_routes = list(self._main_router._pydantic_routes.keys())
             available_routers = [r.discriminator for r in self._routers]
-            discriminator_value = payload.get(self.discriminator)
+            discriminator_value = resolve_payload_path(payload, self.discriminator)
             error_msg = (
                 f"No handler found for message "
                 f"({self.discriminator}={discriminator_value!r}). "
@@ -164,9 +169,15 @@ class RecordProcessingMixin:
         # before -> route -> after, with balanced cleanup: a before-hook raising
         # still unwinds the middlewares that already entered (release slots,
         # cancel monitors), and after-hook errors never mask the real failure.
-        result = await _run_middleware_stack(
-            self._middlewares, payload, record, context, ctx, _route
-        )
+        try:
+            result = await _run_middleware_stack(
+                self._middlewares, payload, record, context, ctx, _route
+            )
+        except SkipMessage as skip:
+            # Deliberate ack (e.g. idempotency saw a completed duplicate):
+            # success, never a batchItemFailure — SQS must delete, not redeliver.
+            self._log("info", "Record skipped", msg_id=msg_id, reason=str(skip))
+            return None
 
         self._log("info", "Record processing completed successfully", msg_id=msg_id)
         return result

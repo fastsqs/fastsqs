@@ -233,3 +233,85 @@ def test_flexible_matching_variant_collision_raises_valueerror():
             pass
 
     assert "x_foo" in str(excinfo.value)
+
+
+# --------------------------------------------------------------------------
+# __message_type__ override: decouple the route key from the class name
+# --------------------------------------------------------------------------
+
+class PaymentApproved(SQSEvent):
+    __message_type__ = "com.acme.payment.approved.v1"
+    payment_id: str = "x"
+
+
+class PaymentApprovedChild(PaymentApproved):
+    pass
+
+
+def test_message_type_override_returned_by_get_message_type():
+    assert PaymentApproved.get_message_type() == "com.acme.payment.approved.v1"
+
+
+def test_message_type_override_variants_are_exact_only():
+    # Case/format variants make no sense for a namespaced/versioned type.
+    assert PaymentApproved.get_message_type_variants() == {
+        "com.acme.payment.approved.v1"
+    }
+
+
+def test_message_type_override_is_not_inherited():
+    # A subclass without its OWN override falls back to class-name derivation;
+    # silently inheriting the parent's key would collide with it at routing.
+    assert PaymentApprovedChild.get_message_type() == "payment_approved_child"
+
+
+def test_message_type_override_routes_end_to_end():
+    app = FastSQS()
+    ran = []
+
+    @app.route(PaymentApproved)
+    async def handle(msg: PaymentApproved):
+        ran.append(msg.payment_id)
+
+    r = SQSTestClient(app).send(
+        {"type": "com.acme.payment.approved.v1", "payment_id": "p-1"}
+    )
+
+    assert r == {"batchItemFailures": []}
+    assert ran == ["p-1"]
+
+
+def test_message_type_override_snake_name_no_longer_matches():
+    # The override REPLACES the class-name key; "payment_approved" must not route.
+    app = FastSQS()
+    ran = []
+
+    @app.route(PaymentApproved)
+    async def handle(msg: PaymentApproved):
+        ran.append(msg.payment_id)
+
+    r = SQSTestClient(app).send(
+        {"type": "payment_approved", "payment_id": "p-1"}, message_id="m1"
+    )
+
+    assert r == {"batchItemFailures": [{"itemIdentifier": "m1"}]}
+    assert ran == []
+
+
+def test_flexible_matching_override_matches_exact_value_only():
+    app = FastSQS(flexible_matching=True)
+    ran = []
+
+    @app.route(PaymentApproved)
+    async def handle(msg: PaymentApproved):
+        ran.append(msg.payment_id)
+
+    client = SQSTestClient(app)
+    ok = client.send({"type": "com.acme.payment.approved.v1", "payment_id": "p"})
+    wrong_case = client.send(
+        {"type": "COM.ACME.PAYMENT.APPROVED.V1", "payment_id": "p"}, message_id="m2"
+    )
+
+    assert ok == {"batchItemFailures": []}
+    assert wrong_case == {"batchItemFailures": [{"itemIdentifier": "m2"}]}
+    assert ran == ["p"]

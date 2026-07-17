@@ -101,6 +101,21 @@ With this app, the route value is still the snake_case class name, but FastSQS r
 {"event": "order_created", "order_id": "order-123", "amount": 5}
 ```
 
+A `.` in the discriminator means nested traversal: `discriminator="metadata.eventType"` reads the type from `payload["metadata"]["eventType"]`, which is how `metadata`+`data` envelopes route. See [Consume standard envelopes](standard-envelopes.md).
+
+## Override the route key
+
+Set `__message_type__` on the model to use a route key other than the snake_case class name — namespaced, versioned types included:
+
+```python
+class OrderCreated(SQSEvent):
+    __message_type__ = "com.acme.order.created.v1"
+
+    order_id: str
+```
+
+A body with `"type": "com.acme.order.created.v1"` now routes to this model; the class-name key `"order_created"` no longer matches. The override is own-class only — a subclass without its own `__message_type__` falls back to its class-name key.
+
 ## Match name variants
 
 By default a message matches only the exact snake_case class name. Set `flexible_matching=True` to also match the class name and its camelCase and kebab-case forms.
